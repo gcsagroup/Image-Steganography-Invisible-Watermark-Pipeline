@@ -1,4 +1,4 @@
-# 通用的鲁棒图像隐写术
+# 通用的鲁棒图像隐写术/不可见水印管线
 
 [简体中文](README.md) | [繁體中文](README_ZH-Traditional.md) | [English](README_EN.md)
 
