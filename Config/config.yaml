@@ -1,0 +1,331 @@
+# VAE 图像隐写标准化管线配置
+# Standardized VAE image-steganography pipeline configuration
+
+# 模型加载与 latent 规范
+# Model loading and latent convention
+model:
+  # 计算设备：auto 自动选择 CUDA 或 CPU；也可填写 cuda、cpu
+  # Compute device: auto selects CUDA or CPU; cuda and cpu are also accepted
+  device: auto
+  # 推理张量类型：支持 float32、float16、bfloat16
+  # Inference tensor dtype: float32, float16, or bfloat16
+  dtype: float32
+  # 原生 VAE 配置和权重
+  # Original VAE configuration and weights
+  original_vae:
+    # VAE 结构配置路径，相对于 PipeLine 根目录
+    # VAE architecture path, relative to the PipeLine root
+    config: Weights/vae_config.json
+    # VAE safetensors 权重路径，相对于 PipeLine 根目录
+    # VAE safetensors path, relative to the PipeLine root
+    weights: Weights/StableDiffusion3VAE.safetensors
+  # 提取端改造编码器
+  # Modified extraction encoder
+  modified_encoder:
+    # 编码器权重路径，相对于 PipeLine 根目录
+    # Encoder weights path, relative to the PipeLine root
+    weights: Weights/FineTurnEncoder.pth
+  # Pipeline 内部 latent 规范
+  # Pipeline-internal latent convention
+  latent:
+    # latent 通道数
+    # Number of latent channels
+    channels: 16
+    # 图像到 latent 的空间下采样倍数
+    # Spatial downsampling factor from image to latent
+    downsample_factor: 8
+    # VAE latent 缩放系数
+    # VAE latent scaling factor
+    scaling_factor: 1.5305
+    # VAE latent 平移系数
+    # VAE latent shift factor
+    shift_factor: 0.0609
+    # latent 约定：当前仅支持 shifted_scaled
+    # Latent convention: currently only shifted_scaled is supported
+    convention: shifted_scaled
+
+# 图像和秘密信息预处理
+# Image and secret-payload preprocessing
+preprocessing:
+  # 文本编码：utf-8、gbk、utf-16、ascii，不区分大小写
+  # Text encoding: utf-8, gbk, utf-16, or ascii; case-insensitive
+  # 帧头编码值：00=UTF-8、01=GBK、10=ASCII、11=UTF-16
+  # Frame-header encoding values: 00=UTF-8, 01=GBK, 10=ASCII, 11=UTF-16
+  text_encoding: utf-8
+  # 字节转比特顺序：当前仅支持高位优先
+  # Byte-to-bit order: currently only MSB-first is supported
+  bit_order: msb_first
+  # 纠错编码设置
+  # Error-correction coding settings
+  ecc:
+    # 是否启用纠错编码
+    # Whether error-correction coding is enabled
+    enabled: true
+    # 纠错方案：none 或 hamming74
+    # ECC scheme: none or hamming74
+    # 帧头 ECC 值：0=none、1=hamming74
+    # Frame-header ECC value: 0=none, 1=hamming74
+    scheme: hamming74
+  # 固定长度头部帧设置；头部仅携带编码、ECC、长度和 CRC
+  # Fixed-length header carrying only encoding, ECC, length, and CRC
+  frame:
+    # 头部重复次数；必须是正奇数，提取时逐 bit 多数表决
+    # Header repetition count; must be positive and odd, decoded by per-bit majority vote
+    header_repetitions: 3
+  # 不规整输入图像的尺寸规范化设置
+  # Size normalization for irregular input images
+  image_adjustment:
+    # 输出宽高必须是该数值的整数倍；必须兼容 VAE 下采样倍数
+    # Output width and height must be multiples of this value; it must be compatible with the VAE downsample factor
+    multiple: 8
+    # 调整方法：stretch 直接拉伸；scale_crop 等比缩放后中心裁剪
+    # Adjustment method: stretch resizes directly; scale_crop preserves aspect ratio then center-crops
+    method: scale_crop
+    # 图像重采样算法：nearest、bilinear、bicubic、lanczos
+    # Image resampling algorithm: nearest, bilinear, bicubic, or lanczos
+    resample: lanczos
+  # 每个载体图像像素允许的最终嵌入 bit 数；实际容量向下取整
+  # Final embedded bits allowed per cover-image pixel; actual capacity is rounded down
+  capacity_bits_per_pixel: 0.005
+  # 支持的图像规格；容量由实际宽度×高度×上述比例动态计算
+  # Supported image profiles; capacity is dynamically calculated from actual width × height × the ratio above
+  profiles:
+    1024x1024:
+      # 图像宽度，单位为像素
+      # Image width in pixels
+      width: 1024
+      # 图像高度，单位为像素
+      # Image height in pixels
+      height: 1024
+    1536x1024:
+      # 图像宽度，单位为像素
+      # Image width in pixels
+      width: 1536
+      # 图像高度，单位为像素
+      # Image height in pixels
+      height: 1024
+    1024x1536:
+      # 图像宽度，单位为像素
+      # Image width in pixels
+      width: 1024
+      # 图像高度，单位为像素
+      # Image height in pixels
+      height: 1536
+
+# DCT 稳定性得分图生成和存储
+# DCT stability-score generation and storage
+stability:
+  # DCT 分块边长，单位为 latent 像素
+  # DCT block side length in latent pixels
+  block_size: 8
+  # 反差值计算的数值稳定项
+  # Numerical epsilon used by inverse-difference scoring
+  epsilon: 1.0e-8
+  # 输入文件扩展名
+  # Input latent file extension
+  file_extension: .pt
+  # 文件匹配方式：当前按首个下划线前的标识匹配
+  # File matching mode: currently matches the identifier before the first underscore
+  matching: base_id
+  # 最大使用样本数：null 表示使用全部匹配样本
+  # Maximum sample count: null uses every matched pair
+  max_samples: null
+  # 压缩稳定图输出目录，相对于 PipeLine 根目录
+  # Compressed stability-map directory, relative to the PipeLine root
+  output_dir: Weights
+  # 稳定图文件名模板，profile 会替换为图像规格
+  # Stability-map filename template; profile is replaced by the image profile
+  filename_template: stability_{profile}.npz
+  # 算法版本，写入稳定图元数据
+  # Algorithm version stored in stability-map metadata
+  algorithm_version: "1.0"
+  # 缺少严格对应稳定图时的位置策略
+  # Position strategy used when selecting a stability map
+  map_matching:
+    # strict：仅精确图；normalized_interpolation：最接近图归一化插值；analytic_band：解析频带
+    # strict: exact map only; normalized_interpolation: interpolate the closest map; analytic_band: analytical band scores
+    strategy: normalized_interpolation
+    # 归一化插值策略参数
+    # Normalized-interpolation parameters
+    interpolation:
+      # 空间插值方法：nearest、bilinear、bicubic
+      # Spatial interpolation mode: nearest, bilinear, or bicubic
+      mode: bilinear
+      # 双线性/双三次插值是否对齐角点
+      # Whether bilinear/bicubic interpolation aligns corners
+      align_corners: false
+      # 插值后是否逐通道重新归一化到 [0,1]
+      # Whether to renormalize each interpolated channel to [0,1]
+      renormalize: true
+      # 插值后得分幂次，大于 1 会强调高置信度位置
+      # Score exponent after interpolation; values above 1 emphasize high-confidence positions
+      score_gamma: 1.0
+      # 选择来源稳定图时宽高比差异的权重
+      # Aspect-ratio-distance weight used when selecting a source map
+      aspect_ratio_weight: 2.0
+      # 选择来源稳定图时图像面积差异的权重
+      # Image-area-distance weight used when selecting a source map
+      area_weight: 1.0
+    # 解析式频带策略参数
+    # Analytical frequency-band parameters
+    analytic_band:
+      # 归一化径向频带中心
+      # Normalized radial band center
+      center: 0.34
+      # 高斯频带标准差
+      # Gaussian-band standard deviation
+      sigma: 0.24
+      # 排除的最低归一化频率
+      # Minimum normalized frequency
+      low_cutoff: 0.04
+      # 排除的最高归一化频率
+      # Maximum normalized frequency
+      high_cutoff: 0.82
+      # 横纵频率不平衡惩罚，0 表示关闭
+      # Horizontal/vertical frequency-imbalance penalty; 0 disables it
+      axis_imbalance_penalty: 0.0
+      # 每个 latent 通道的频带得分先验，必须为 16 项
+      # Per-latent-channel band-score priors; exactly 16 values are required
+      channel_priors: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+# DCT 隐写核心参数
+# DCT steganography core parameters
+steganography:
+  # 通道分组；同组通道嵌入相同 bit 并在提取时投票
+  # Channel groups; members embed identical bits and vote during extraction
+  groups: [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15]]
+  # 是否根据内容能量自适应调整 alpha
+  # Whether alpha adapts to latent content energy
+  content_adaptive: true
+  # 是否根据频率位置应用 HVS 权重
+  # Whether HVS frequency weights are applied
+  frequency_adaptive: true
+  # 低频能量圆形区域半径，单位为 DCT 坐标
+  # Radius of the low-frequency energy region in DCT coordinates
+  low_frequency_radius: 8
+  # 低频能量占总内容能量的权重
+  # Weight of low-frequency energy in total content energy
+  low_frequency_weight: 0.05
+  # 高频能量占总内容能量的权重
+  # Weight of high-frequency energy in total content energy
+  high_frequency_weight: 0.95
+  # 内容自适应 alpha 的最小值
+  # Minimum content-adaptive alpha
+  minimum_alpha: 0.05
+  # 内容自适应 alpha 的最大值
+  # Maximum content-adaptive alpha
+  maximum_alpha: 1.0
+  # 各 latent 通道的典型内容能量参考值，必须为 16 项
+  # Typical content-energy references per latent channel; exactly 16 values
+  channel_energy: [0.08, 0.08, 0.09, 0.10, 0.07, 0.10, 0.09, 0.10, 0.09, 0.07, 0.08, 0.08, 0.08, 0.08, 0.10, 0.10]
+  # HVS 频率距离边界，按从小到大排列
+  # HVS frequency-distance boundaries in ascending order
+  hvs_distance_bounds: [50.0, 75.0, 130.0, 145.0]
+  # 各 HVS 距离区间的 alpha 权重，数量应比边界多 1
+  # Alpha weights for HVS distance bands; one more value than bounds
+  hvs_weights: [1.0, 0.8, 0.75, 1.0, 1.2]
+  # 各图像规格独立的嵌入参数
+  # Profile-specific embedding parameters
+  profiles:
+    1024x1024:
+      # 每个 8x8 latent 块最多选择的 DCT 位置数
+      # Maximum selected DCT positions per 8x8 latent block
+      positions_per_block: 3
+      # DCT 稳定性得分阈值，范围为 0 到 1
+      # DCT stability-score threshold in the range 0 to 1
+      stability_threshold: 0.8
+      # 16 个 latent 通道的基础嵌入强度
+      # Base embedding strength for all 16 latent channels
+      base_alpha: [0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22]
+    1536x1024:
+      # 每个 8x8 latent 块最多选择的 DCT 位置数
+      # Maximum selected DCT positions per 8x8 latent block
+      positions_per_block: 3
+      # DCT 稳定性得分阈值，范围为 0 到 1
+      # DCT stability-score threshold in the range 0 to 1
+      stability_threshold: 0.8
+      # 16 个 latent 通道的基础嵌入强度
+      # Base embedding strength for all 16 latent channels
+      base_alpha: [0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22]
+    1024x1536:
+      # 每个 8x8 latent 块最多选择的 DCT 位置数
+      # Maximum selected DCT positions per 8x8 latent block
+      positions_per_block: 3
+      # DCT 稳定性得分阈值，范围为 0 到 1
+      # DCT stability-score threshold in the range 0 to 1
+      stability_threshold: 0.8
+      # 16 个 latent 通道的基础嵌入强度
+      # Base embedding strength for all 16 latent channels
+      base_alpha: [0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22, 0.22]
+
+# 提取和文本恢复参数
+# Extraction and text-recovery parameters
+extraction:
+  # 改造编码器输入归一化：minus_one_one 对应 [-1,1]
+  # Modified-encoder input normalization: minus_one_one maps to [-1,1]
+  input_normalization: minus_one_one
+  # 通道组投票平局时输出的 bit，仅支持 0 或 1
+  # Bit emitted for tied channel-group votes; must be 0 or 1
+  tie_bit: 0
+  # 文本解码错误策略：strict 或 replace
+  # Text decoding error policy: strict or replace
+  text_errors: strict
+
+# 图像质量和攻击鲁棒性评估
+# Image-quality and attack-robustness evaluation
+evaluation:
+  # 是否计算 PSNR
+  # Whether to calculate PSNR
+  enable_psnr: true
+  # 是否计算 SSIM
+  # Whether to calculate SSIM
+  enable_ssim: true
+  # 是否计算 LPIPS；首次使用时才加载模型
+  # Whether to calculate LPIPS; the model is loaded on first use
+  enable_lpips: true
+  # LPIPS 特征网络：alex、vgg 或 squeeze
+  # LPIPS feature network: alex, vgg, or squeeze
+  lpips_net: alex
+  # JPEG 攻击质量等级列表，范围为 1 到 100
+  # JPEG attack quality levels in the range 1 to 100
+  jpeg_qualities: [90, 70, 50]
+  # JPEG 色度子采样：0 表示 4:4:4
+  # JPEG chroma subsampling; 0 means 4:4:4
+  jpeg_subsampling: 0
+  # 单次提取失败是否终止整个评估
+  # Whether one extraction failure aborts the full evaluation
+  fail_on_extraction_error: false
+
+# 批量测试与 Markdown 报告
+# Batch testing and Markdown reporting
+testing:
+  # 测试载体图像目录，相对于 PipeLine 根目录
+  # Test cover-image directory, relative to the PipeLine root
+  cover_dir: Test/Cover
+  # 测试隐写 PNG 输出目录，相对于 PipeLine 根目录
+  # Test stego-PNG output directory, relative to the PipeLine root
+  stego_dir: Test/Stego
+  # Markdown 报告输出目录，相对于 PipeLine 根目录
+  # Markdown report output directory, relative to the PipeLine root
+  report_dir: Test/Reports
+  # Markdown 报告文件名
+  # Markdown report filename
+  report_filename: report.md
+  # 随机消息生成种子
+  # Random payload seed
+  seed: 114514
+  # 随机消息使用配置容量的比例，范围大于 0 且不超过 1
+  # Fraction of configured capacity used by random payloads, greater than 0 and at most 1
+  payload_utilization: 0.5
+  # 允许扫描的载体图像扩展名
+  # Cover-image extensions to scan
+  image_extensions: [.png, .jpg, .jpeg]
+  # 单张图失败时是否立即停止
+  # Whether to stop immediately when one image fails
+  fail_fast: false
+  # 是否覆盖已有测试隐写图像和报告
+  # Whether existing test stego images and reports may be overwritten
+  overwrite: true
+  # 最大测试图片数：null 表示不限制；正式完整测试默认扫描全部图像
+  # Maximum number of test images; null means unlimited
+  max_images: null
