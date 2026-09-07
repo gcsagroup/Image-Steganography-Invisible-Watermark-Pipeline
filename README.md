@@ -56,7 +56,6 @@ PipeLine/
 │   ├── diffusion_pytorch_model.safetensors # 原生 VAE 权重
 │   ├── encoder_final.pth            # 微调后的独立提取编码器
 │   ├── stability_*.npz              # 压缩稳定性得分图
-│   └── ONNX/                        # BF16 权重存储、FP32 计算的 ONNX 中间模型
 ├── Stego/                           # 默认隐写 PNG 输出目录
 ├── Test/
 │   ├── Cover/                       # 批量测试载体图像
@@ -108,29 +107,6 @@ PipeLine/Weights/encoder_final.pth
 
 两个复制后的权重已与原始 `Weights/` 文件进行 SHA-256 一致性校验，内容保持不变。
 
-## ONNX 中间模型与边缘部署
-
-为了后续部署，原生 VAE 按隐写流程拆成 encoder 和 decoder 两个子图，微调编码器单独导出。产物位于 `PipeLine/Weights/ONNX/`：
-
-| ONNX 文件 | 输入 → 输出 | 大小（约） |
-| --- | --- | ---: |
-| `original_vae_encoder_bf16.onnx` | `[N,3,H,W]` RGB 归一化张量 → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-| `original_vae_decoder_bf16.onnx` | `[N,16,H,W]` shifted/scaled latent → `[N,3,H×8,W×8]` 图像张量 | 99.2 MB |
-| `modified_encoder_bf16.onnx` | `[N,3,H,W]` 隐写图像张量 → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-
-三个 ONNX 图的大体积 initializer 均以 **BF16 存储**，并在图内通过 `Cast(BF16→FP32)` 上转换；公开输入、输出与实际算子计算仍保持 **FP32**。这使文件体积约减少 50%，但运行时需展开 FP32 权重，因此不保证显存/内存也按同比例降低。模型包含 Pipeline 使用的 `shift_factor=0.0609` 与 `scaling_factor=1.5305`，并设置动态 batch、宽度和高度轴。三个图均已通过 ONNX checker 和 ONNX Runtime 实际推理验证。
-
-原生 VAE 的源权重本身就是 BF16，因此该 ONNX 版与旧 FP32 导出在测试输入上数值一致。微调编码器的源 checkpoint 是 FP32，其 ONNX 副本转为 BF16 存储后会产生轻微舍入；64×64 测试的 latent 平均绝对差为 0.00132，最大绝对差为 0.00468。这些 ONNX 文件尚未单独获得完整隐写评测背书。
-
-可重复执行导出：
-
-```powershell
-conda run -n base python -m PipeLine.tools.export_onnx
-```
-
-默认使用 `--weight-storage bfloat16`。可通过 `--config`、`--output-dir`、`--sample-size`、`--opset` 和 `--weight-storage float32` 覆盖默认值。
-
-> **ONNX 仅作为中间交换格式，不是最终部署格式，也不代表已经获得与 PyTorch FP32 相同的完整隐写评测成绩。** 实际部署前仍需按目标设备转换和优化，例如 NVIDIA TensorRT engine、Intel OpenVINO IR、Apple Core ML，或移动端/专用 NPU 所要求的格式，并验证算子支持、动态尺寸、内存布局、归一化、latent shift/scale 和数值精度。任何 FP16、BF16、FP8 或 INT8 转换都必须重新校准稳定性得分图并重新测试提取准确率、CRC 和图像质量。
 
 ## 环境安装
 
