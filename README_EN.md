@@ -56,7 +56,6 @@ PipeLine/
 │   ├── diffusion_pytorch_model.safetensors # Native VAE weights
 │   ├── encoder_final.pth           # Fine-tuned extraction encoder
 │   ├── stability_*.npz             # Compressed stability maps
-│   └── ONNX/                       # BF16 weight storage, FP32-compute ONNX models
 ├── Stego/                          # Default stego PNG output
 ├── Test/
 │   ├── Cover/                      # Batch-test cover images
@@ -105,30 +104,6 @@ Tensor-by-tensor inspection shows that all 244 tensors in `diffusion_pytorch_mod
 The current `encoder_final.pth` contains 106 **FP32** tensors and is not stored as BF16. It is still loaded explicitly with `model.dtype: float32`. If a future extraction encoder is stored as BF16, it must likewise be upcast to FP32 before the FP32 benchmark claims in this document apply.
 
 The copied weights were checked against the original `Weights/` files with SHA-256 and are byte-identical.
-
-## ONNX Intermediate Models and Edge Deployment
-
-The native VAE is split into encoder and decoder graphs because the latent is modified between those stages. The extraction encoder is exported separately. Outputs are stored in `PipeLine/Weights/ONNX/`:
-
-| ONNX file | Input → output | Approx. size |
-| --- | --- | ---: |
-| `original_vae_encoder_bf16.onnx` | `[N,3,H,W]` normalized RGB → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-| `original_vae_decoder_bf16.onnx` | `[N,16,H,W]` shifted/scaled latent → `[N,3,H×8,W×8]` image tensor | 99.2 MB |
-| `modified_encoder_bf16.onnx` | `[N,3,H,W]` stego image → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-
-All large initializers are **stored in BF16** and upcast in-graph with `Cast(BF16→FP32)`; public inputs, outputs, and operator computation remain **FP32**. This cuts file size by about 50%, but runtime FP32 weight expansion means device memory is not guaranteed to fall by the same proportion. The graphs include `shift_factor=0.0609` and `scaling_factor=1.5305`, use dynamic batch, width, and height axes, and pass both ONNX checker and ONNX Runtime execution.
-
-The native VAE source weights are already BF16, so these ONNX graphs were numerically identical to the previous FP32 exports on the validation input. The fine-tuned encoder source checkpoint is FP32, so storing its ONNX copy in BF16 introduces minor rounding: on the 64×64 validation input, latent mean absolute difference was 0.00132 and maximum absolute difference was 0.00468. These ONNX files have not yet received a separate full steganography benchmark endorsement.
-
-Re-export with:
-
-```powershell
-conda run -n base python -m PipeLine.tools.export_onnx
-```
-
-The default is `--weight-storage bfloat16`. Override defaults with `--config`, `--output-dir`, `--sample-size`, `--opset`, or `--weight-storage float32`.
-
-> **ONNX is only an interchange format, not the final deployment format, and it has not inherited the full PyTorch FP32 steganography benchmark automatically.** Convert and optimize it for the target, such as NVIDIA TensorRT, Intel OpenVINO IR, Apple Core ML, or a mobile/NPU-specific format. Revalidate operator support, dynamic dimensions, memory layout, normalization, latent shift/scale, and numerical precision. Any FP16, BF16, FP8, or INT8 conversion requires fresh stability-map calibration and complete extraction, CRC, and quality testing.
 
 ## Installation
 
