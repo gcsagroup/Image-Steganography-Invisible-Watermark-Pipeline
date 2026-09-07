@@ -56,7 +56,6 @@ PipeLine/
 │   ├── diffusion_pytorch_model.safetensors # 原生 VAE 權重
 │   ├── encoder_final.pth            # 微調後的獨立提取編碼器
 │   ├── stability_*.npz              # 壓縮穩定性得分圖
-│   └── ONNX/                        # BF16 權重儲存、FP32 計算的 ONNX 中間模型
 ├── Stego/                           # 默認隱寫 PNG 輸出目錄
 ├── Test/
 │   ├── Cover/                       # 批量測試載體圖像
@@ -107,30 +106,6 @@ PipeLine/Weights/encoder_final.pth
 當前倉庫中的 `encoder_final.pth` 經檢查包含 106 個 **FP32** 張量，本身已是 FP32，並非 BF16。Pipeline 仍顯式按 `model.dtype: float32` 加載它。若未來將微調編碼器另存為 BF16，也必須在加載後上轉換為 FP32，再引用本項目的 FP32 評測結論。這裡以文件實際 dtype 為準，不將當前編碼器錯誤標注為 BF16。
 
 兩個復制後的權重已與原始 `Weights/` 文件進行 SHA-256 一致性校驗，內容保持不變。
-
-## ONNX 中間模型與邊緣部署
-
-為了後續部署，原生 VAE 按隱寫流程拆成 encoder 和 decoder 兩個子圖，微調編碼器單獨導出。產物位於 `PipeLine/Weights/ONNX/`：
-
-| ONNX 文件 | 輸入 → 輸出 | 大小（約） |
-| --- | --- | ---: |
-| `original_vae_encoder_bf16.onnx` | `[N,3,H,W]` RGB 歸一化張量 → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-| `original_vae_decoder_bf16.onnx` | `[N,16,H,W]` shifted/scaled latent → `[N,3,H×8,W×8]` 圖像張量 | 99.2 MB |
-| `modified_encoder_bf16.onnx` | `[N,3,H,W]` 隱寫圖像張量 → `[N,16,H/8,W/8]` shifted/scaled latent | 68.7 MB |
-
-三個 ONNX 圖的大體積 initializer 均以 **BF16 儲存**，並在圖內透過 `Cast(BF16→FP32)` 上轉換；公開輸入、輸出與實際算子計算仍保持 **FP32**。這使檔案體積約減少 50%，但執行時需展開 FP32 權重，因此不保證顯存/記憶體也按同比例降低。模型包含 Pipeline 使用的 `shift_factor=0.0609` 與 `scaling_factor=1.5305`，並設置動態 batch、寬度和高度軸。三個圖均已通過 ONNX checker 和 ONNX Runtime 實際推理驗證。
-
-原生 VAE 的源權重本身就是 BF16，因此該 ONNX 版與舊 FP32 導出在測試輸入上數值一致。微調編碼器的源 checkpoint 是 FP32，其 ONNX 副本轉為 BF16 儲存後會產生輕微捨入；64×64 測試的 latent 平均絕對差為 0.00132，最大絕對差為 0.00468。這些 ONNX 檔案尚未單獨獲得完整隱寫評測背書。
-
-可重復執行導出：
-
-```powershell
-conda run -n base python -m PipeLine.tools.export_onnx
-```
-
-默認使用 `--weight-storage bfloat16`。可通過 `--config`、`--output-dir`、`--sample-size`、`--opset` 和 `--weight-storage float32` 覆蓋默認值。
-
-> **ONNX 僅作為中間交換格式，不是最終部署格式，也不代表已經獲得與 PyTorch FP32 相同的完整隱寫評測成績。** 實際部署前仍需按目標設備轉換和優化，例如 NVIDIA TensorRT engine、Intel OpenVINO IR、Apple Core ML，或移動端/專用 NPU 所要求的格式，並驗證算子支持、動態尺寸、內存布局、歸一化、latent shift/scale 和數值精度。任何 FP16、BF16、FP8 或 INT8 轉換都必須重新校準穩定性得分圖並重新測試提取準確率、CRC 和圖像質量。
 
 ## 環境安裝
 
