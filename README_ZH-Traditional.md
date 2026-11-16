@@ -2,6 +2,8 @@
 
 [簡體中文](README.md) | [繁體中文](README_ZH-Traditional.md) | [English](README_EN.md)
 
+[Wispio 模型散布權限](WISPIO-MODEL-RIGHTS.md)列出 GCSA 已確認的授權範圍，以及完整模型發行前仍須補齊的依據。
+
 本項目是一套基於 VAE 在圖像潛空間 latent 上進行秘密信息隱藏的圖像隱寫管線，覆蓋載體圖像預處理、秘密消息成幀與糾錯、VAE 編解碼、穩定嵌入位置選擇、秘密提取、JPEG 魯棒性評估、圖像質量評估和批量測試。所有運行參數集中在 [`Config/config.yaml`](Config/config.yaml) 中管理。
 
 
