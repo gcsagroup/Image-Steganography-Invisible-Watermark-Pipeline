@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [繁體中文](README_ZH-Traditional.md) | [English](README_EN.md)
 
-[Proposed Wispio distribution permission and model rights](WISPIO-MODEL-RIGHTS.md) (pending rights-holder approval).
+The [Wispio model rights record](WISPIO-MODEL-RIGHTS.md) lists the GCSA permissions confirmed for Wispio and the evidence still needed to distribute the complete models.
 
 URIS is a VAE-based image steganography pipeline that hides secret data in image latent space. It covers cover-image preprocessing, payload framing and error correction, VAE encoding and decoding, stable embedding-position selection, secret extraction, JPEG robustness evaluation, image-quality evaluation, and batch testing. All runtime settings are managed in [`Config/config.yaml`](Config/config.yaml).
 
