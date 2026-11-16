@@ -2,6 +2,8 @@
 
 [简体中文](README.md) | [繁體中文](README_ZH-Traditional.md) | [English](README_EN.md)
 
+[Wispio 分发许可提案与模型权利说明](WISPIO-MODEL-RIGHTS.md)（待权利人确认）
+
 本项目是一套基于 VAE 在图像潜空间 latent 上进行秘密信息隐藏的图像隐写管线，覆盖载体图像预处理、秘密消息成帧与纠错、VAE 编解码、稳定嵌入位置选择、秘密提取、JPEG 鲁棒性评估、图像质量评估和批量测试。所有运行参数集中在 [`Config/config.yaml`](Config/config.yaml) 中管理。
 
 
